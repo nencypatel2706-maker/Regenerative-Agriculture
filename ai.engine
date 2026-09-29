@@ -1,0 +1,68 @@
+import os
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class ArginAIEngine:
+    def __init__(self):
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise RuntimeError("GEMINI_API_KEY is not set in the environment.")
+        self.client = genai.Client(api_key=api_key)
+        self.model_id = "gemini-2.5-flash"
+
+    def diagnose_crop_disease(self, image_bytes: bytes, mime_type: str, regional_context: str) -> str:
+        prompt = f"""
+You are ArgiN, an agricultural AI assistant focused on regenerative farming in India.
+Analyze the supplied crop image from {regional_context}.
+
+Return:
+1. Possible disease, pest, nutrient deficiency, or abiotic stress.
+2. Visible symptoms supporting the assessment.
+3. Confidence/uncertainty and what cannot be determined from the image.
+4. Practical regenerative/low-impact next steps.
+5. When professional/local agronomist confirmation is advisable.
+
+Do not claim certainty from an image alone and do not invent soil or weather measurements.
+"""
+        response = self.client.models.generate_content(
+            model=self.model_id,
+            contents=[
+                prompt,
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            ],
+        )
+        return response.text or "No analysis was returned."
+
+    def generate_regenerative_advisory(self, soil_data: dict, weather_data: dict, crop: str = "Not specified", region: str = "India") -> str:
+        system_instruction = (
+            "You are ArgiN's Inter-State Agricultural Cooperation Agent. "
+            "Provide practical, conservative agricultural guidance that supports soil health, "
+            "water efficiency, biodiversity, and smallholder resilience. Never invent missing measurements."
+        )
+        prompt = f"""
+Create a weekly regenerative farming plan for:
+Region: {region}
+Crop: {crop}
+Soil pH: {soil_data.get('ph', 'unknown')}
+Organic Carbon: {soil_data.get('carbon_level', 'unknown')}%
+Weather Forecast: {weather_data.get('forecast', 'unknown')}
+Expected Rainfall: {weather_data.get('rainfall', 'unknown')} mm
+
+Provide:
+1. Immediate actions for the next 7 days.
+2. Water/irrigation guidance.
+3. Cover crop or rotation ideas where appropriate.
+4. Soil recovery practices.
+5. Pest/disease prevention.
+6. Longer-term 30-90 day actions.
+Clearly mark assumptions and avoid pretending that demo data is real field telemetry.
+"""
+        response = self.client.models.generate_content(
+            model=self.model_id,
+            contents=prompt,
+            config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.3),
+        )
+        return response.text or "No advisory was returned."
